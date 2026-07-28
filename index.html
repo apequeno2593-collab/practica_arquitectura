@@ -11,8 +11,10 @@
     input, select, button { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box; }
     button { background-color: #0284c7; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 15px; transition: 0.3s; }
     button:hover { background-color: #0369a1; }
+    button:disabled { background-color: #64748b; cursor: not-allowed; }
     .badge { margin-top: 20px; padding: 15px; background: #0f172a; border-radius: 8px; border: 2px dashed #38bdf8; display: none; }
     .badge img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #38bdf8; margin-top: 10px; }
+    .error { color: #ef4444; margin-top: 15px; display: none; }
   </style>
 </head>
 <body>
@@ -38,40 +40,55 @@
       <h2 id="badgeNombre" style="margin: 10px 0 5px 0;"></h2>
       <p id="badgeRango" style="color: #38bdf8; font-weight: bold; margin: 0;"></p>
     </div>
+
+    <div id="mensajeError" class="error">
+      <p id="textoError"></p>
+    </div>
   </div>
  
   <script>
     // =========================================================================
-    // ⚙️ CONFIGURACIÓN DE AZURE (Los alumnos deben completar estos campos)
+    // ⚙️ CONFIGURACIÓN DE AZURE
     // =========================================================================
     const STORAGE_ACCOUNT_NAME = "storageaccountastronauta";
     const CONTAINER_NAME = "contenedorastronauta";
-    // Generar un SAS Token en el portal de Azure para el contenedor con permiso de Escritura (Create/Write)
-    const SAS_TOKEN = "sv=2026-02-06&ss=b&srt=o&sp=rwdlaciytfx&se=2026-07-28T18:15:24Z&st=2026-07-28T10:00:24Z&spr=https&sig=r%2Fu6HUyWRR5ZwLhzdJQGlqyBvLTGnm2zwif4bEVWZts%3D"; 
+    const SAS_TOKEN = "sv=2026-02-06&ss=b&srt=o&sp=rwdlaciytfx&se=2026-07-28T18:15:24Z&st=2026-07-28T10:00:24Z&spr=https&sig=r%2Fu6HUyWRR5ZwLhzdJQGlqyBvLTGnm2zwif4bEVWZts%3D";
+    
+    // URL de tu Azure Function para guardar en SQL Database
+    const FUNCTION_URL = "https://azurefuncionastronauta-bydzfbe7b5h9evd5.westeurope-01.azurewebsites.net/api/RegistrarAstronauta";
     // =========================================================================
  
     document.getElementById('astroForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const btn = document.getElementById('btnEnviar');
+      const errorDiv = document.getElementById('mensajeError');
+      const errorText = document.getElementById('textoError');
+      
       btn.innerText = "Subiendo a Azure Storage...";
       btn.disabled = true;
+      errorDiv.style.display = 'none';
  
       const nombre = document.getElementById('nombre').value;
       const rango = document.getElementById('rango').value;
       const fileInput = document.getElementById('foto');
       const file = fileInput.files[0];
  
-      if (!file) return;
- 
-      // 1. Crear un nombre único para la imagen en el Blob Storage
-      const fileName = `${Date.now()}-${file.name}`;
-      const blobUrl = `https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${fileName}`;
-      const uploadUrl = `${blobUrl}?${SAS_TOKEN}`;
+      if (!file) {
+        mostrarError("Por favor selecciona una foto");
+        btn.innerText = "🚀 Registrar en la Nube";
+        btn.disabled = false;
+        return;
+      }
  
       try {
-        // 2. Subir la foto directamente a Azure Blob Storage usando la API REST
-        const response = await fetch(uploadUrl, {
+        // 1️⃣ SUBIR FOTO A BLOB STORAGE
+        console.log("Paso 1: Subiendo foto a Blob Storage...");
+        const fileName = `${Date.now()}-${file.name}`;
+        const blobUrl = `https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${fileName}`;
+        const uploadUrl = `${blobUrl}?${SAS_TOKEN}`;
+ 
+        const uploadResponse = await fetch(uploadUrl, {
           method: 'PUT',
           headers: {
             'x-ms-blob-type': 'BlockBlob',
@@ -80,24 +97,55 @@
           body: file
         });
  
-        if (response.ok) {
-          // 3. Mostrar el carnet generado con la URL directa de la foto alojada en la nube
-          document.getElementById('badgeImg').src = blobUrl;
-          document.getElementById('badgeNombre').innerText = nombre;
-          document.getElementById('badgeRango').innerText = `Rango: ${rango}`;
-          document.getElementById('badge').style.display = 'block';
-          document.getElementById('astroForm').style.display = 'none';
-        } else {
-          alert("Error al subir a Azure Storage. Revisa la configuración del SAS Token o CORS.");
+        if (!uploadResponse.ok) {
+          throw new Error(`Error al subir a Blob Storage (${uploadResponse.status}). Revisa el SAS Token o CORS.`);
         }
+        
+        console.log("✓ Foto subida a Blob Storage");
+        btn.innerText = "Guardando en Base de Datos...";
+
+        // 2️⃣ GUARDAR EN SQL DATABASE VIA FUNCTION
+        console.log("Paso 2: Guardando en SQL Database...");
+        const dbResponse = await fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: nombre,
+            rango: rango,
+            urlFoto: blobUrl
+          })
+        });
+ 
+        if (!dbResponse.ok) {
+          const errorContent = await dbResponse.text();
+          throw new Error(`Error en la Base de Datos (${dbResponse.status}): ${errorContent}`);
+        }
+        
+        const resultado = await dbResponse.json();
+        console.log("✓ Datos guardados en SQL Database", resultado);
+
+        // 3️⃣ MOSTRAR CARNET
+        document.getElementById('badgeImg').src = blobUrl;
+        document.getElementById('badgeNombre').innerText = nombre;
+        document.getElementById('badgeRango').innerText = `Rango: ${rango}`;
+        document.getElementById('badge').style.display = 'block';
+        document.getElementById('astroForm').style.display = 'none';
+
       } catch (error) {
-        console.error(error);
-        alert("Error de conexión con Azure Storage.");
+        console.error("Error completo:", error);
+        mostrarError(error.message);
       } finally {
         btn.innerText = "🚀 Registrar en la Nube";
         btn.disabled = false;
       }
     });
+
+    function mostrarError(mensaje) {
+      const errorDiv = document.getElementById('mensajeError');
+      const errorText = document.getElementById('textoError');
+      errorText.innerText = "❌ " + mensaje;
+      errorDiv.style.display = 'block';
+    }
   </script>
 </body>
 </html>
