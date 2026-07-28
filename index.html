@@ -39,6 +39,10 @@
       <img id="badgeImg" src="" alt="Foto Astronauta">
       <h2 id="badgeNombre" style="margin: 10px 0 5px 0;"></h2>
       <p id="badgeRango" style="color: #38bdf8; font-weight: bold; margin: 0;"></p>
+      
+      <button type="button" style="background-color: #475569; margin-top: 20px;" onclick="agregarNuevoAstronauta()">
+        ➕ Añadir nuevo astronauta
+      </button>
     </div>
 
     <div id="mensajeError" class="error">
@@ -145,6 +149,20 @@
       const errorText = document.getElementById('textoError');
       errorText.innerText = "❌ " + mensaje;
       errorDiv.style.display = 'block';
+    }
+    function agregarNuevoAstronauta() {
+      // Limpiar campos del formulario
+      document.getElementById('nombre').value = '';
+      document.getElementById('rango').value = 'Comandante';
+      document.getElementById('foto').value = '';
+      
+      // Ocultar carnet y mostrar formulario
+      document.getElementById('badge').style.display = 'none';
+      document.getElementById('astroForm').style.display = 'block';
+      document.getElementById('mensajeError').style.display = 'none';
+      
+      // Scroll al top
+      window.scrollTo(0, 0);
     }
   </script>
 </body>
