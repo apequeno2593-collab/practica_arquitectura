@@ -115,12 +115,14 @@
             urlFoto: blobUrl
           })
         });
-        
+ 
         if (!dbResponse.ok) {
-          throw new Error(`Error en la Base de Datos (${dbResponse.status})`);
+          const errorContent = await dbResponse.text();
+          throw new Error(`Error en la Base de Datos (${dbResponse.status}): ${errorContent}`);
         }
         
-        console.log("✓ Datos guardados en SQL Database");
+        const resultado = await dbResponse.json();
+        console.log("✓ Datos guardados en SQL Database", resultado);
 
         // 3️⃣ MOSTRAR CARNET
         document.getElementById('badgeImg').src = blobUrl;
